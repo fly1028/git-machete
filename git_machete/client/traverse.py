@@ -1,7 +1,7 @@
 import itertools
 import tempfile
 from enum import auto
-from typing import Callable, List, Optional, Type, Union
+from typing import Callable, List, Optional, Tuple, Type, Union
 
 from git_machete.annotation import Annotation, Qualifiers
 from git_machete.client.base import PickRoot
@@ -246,6 +246,12 @@ class TraverseMacheteClient(MacheteClientWithCodeHosting):
                 else:
                     needs_remote_sync = False
 
+                other_remotes = self.__remotes_needing_push(branch, remote)
+                if branch_anno is not None and not branch_anno.qualifiers.push:
+                    other_remotes = []
+                if not opt_push_tracked:
+                    other_remotes = []
+
                 needs_retarget_pr = False
                 if opt_sync_github_prs or opt_sync_gitlab_mrs:
                     prs = list(filter(lambda pr: pr.head == branch, self._get_all_open_prs()))
@@ -288,7 +294,8 @@ class TraverseMacheteClient(MacheteClientWithCodeHosting):
                     if needs_parent_sync and branch_anno is not None:
                         needs_parent_sync = branch_anno.qualifiers.rebase
 
-                needs_any_action = needs_slide_out or needs_parent_sync or needs_remote_sync or needs_retarget_pr or needs_create_pr
+                needs_any_action = (needs_slide_out or needs_parent_sync or needs_remote_sync or
+                                    bool(other_remotes) or needs_retarget_pr or needs_create_pr)
                 if branch != current_branch and needs_any_action:
                     self._ensure_blank_separator()
                     self._switch_branch(branch)
@@ -399,6 +406,9 @@ class TraverseMacheteClient(MacheteClientWithCodeHosting):
                                 needs_remote_sync = branch_anno.qualifiers.push
                         else:
                             needs_remote_sync = False
+                        other_remotes = self.__remotes_needing_push(branch, remote)
+                        if branch_anno is not None and not branch_anno.qualifiers.push:
+                            other_remotes = []
 
                     elif ans in ('q', 'quit'):
                         return
@@ -489,6 +499,11 @@ class TraverseMacheteClient(MacheteClientWithCodeHosting):
                             opt_yes=opt_yes)
                     else:
                         raise UnexpectedMacheteException(f"Unexpected SyncToRemoteStatus: {s}.")
+
+                if other_remotes:
+                    any_action_suggested = True
+                    self.__handle_other_remotes(
+                        current_branch=current_branch, remotes=other_remotes, opt_yes=opt_yes)
 
                 if needs_create_pr:
                     any_action_suggested = True
@@ -745,6 +760,54 @@ class TraverseMacheteClient(MacheteClientWithCodeHosting):
                 opt_yes=opt_yes)
         except ValueError:
             pass
+
+    def __remotes_needing_push(
+            self,
+            branch: LocalBranchShortName,
+            tracking_remote: Optional[str]
+    ) -> List[Tuple[str, SyncToRemoteStatus]]:
+        if not self._config.traverse_push_all_remotes():
+            return []
+        remote_branches = self._git.get_remote_branches()
+        result: List[Tuple[str, SyncToRemoteStatus]] = []
+        for other in self._git.get_remotes():
+            if other == tracking_remote:
+                continue
+            counterpart = RemoteBranchShortName.of(f"{other}/{branch}")
+            # Only offer remotes the branch is already published on;
+            # creating it on further remotes stays an explicit `git push`.
+            if counterpart not in remote_branches:
+                continue
+            relation = self._git.get_relation_to_remote_counterpart(branch, counterpart)
+            if relation in (SyncToRemoteStatus.AHEAD_OF_REMOTE,
+                            SyncToRemoteStatus.DIVERGED_FROM_AND_NEWER_THAN_REMOTE):
+                result.append((other, relation))
+        return result
+
+    def __handle_other_remotes(
+            self,
+            *,
+            current_branch: LocalBranchShortName,
+            remotes: List[Tuple[str, SyncToRemoteStatus]],
+            opt_yes: bool
+    ) -> None:
+        for other, relation in remotes:
+            self._ensure_blank_separator()
+            force = relation == SyncToRemoteStatus.DIVERGED_FROM_AND_NEWER_THAN_REMOTE
+            if force:
+                question = (f"Branch <b>{current_branch}</b> diverged from (and has newer commits than) <b>{other}/{current_branch}</b>.\n"
+                            f"Push <b>{current_branch}</b> with force-with-lease to <b>{other}</b>?")
+                statement = f"Pushing <b>{current_branch}</b> with force-with-lease to <b>{other}</b>..."
+            else:
+                question = f"Push <b>{current_branch}</b> to <b>{other}</b>?"
+                statement = f"Pushing <b>{current_branch}</b> to <b>{other}</b>..."
+            ans = self.ask_if(question + pretty_choices('y', 'N', 'q', 'yq'), statement, opt_yes=opt_yes)
+            if ans in ('y', 'yes', 'yq'):
+                self._git.push(other, current_branch, force_with_lease=force, set_upstream=False)
+                if ans == 'yq':
+                    raise InteractionStopped
+            elif ans in ('q', 'quit'):
+                raise InteractionStopped
 
     def __handle_ahead_state(
             self,
