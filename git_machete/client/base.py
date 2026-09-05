@@ -544,6 +544,31 @@ class MacheteClient:
         else:  # pragma: no cover
             raise UnexpectedMacheteException(f"Invalid squash merged detection mode: {opt_squash_merge_detection}.")
 
+    def _remote_markup(self, remote: str) -> str:
+        color = self._config.remote_color(remote)
+        return f"<b><{color}>{remote}</{color}></b>" if color else f"<b>{remote}</b>"
+
+    def _other_remote_sync_statuses(
+            self,
+            branch: LocalBranchShortName,
+            tracking_remote: Optional[str]
+    ) -> List[Tuple[str, SyncToRemoteStatus]]:
+        """Sync status of `branch` against each remote other than its tracking one where it is already published."""
+        if not self._config.traverse_push_all_remotes():
+            return []
+        remote_branches = self._git.get_remote_branches()
+        result: List[Tuple[str, SyncToRemoteStatus]] = []
+        for other in self._git.get_remotes():
+            if other == tracking_remote:
+                continue
+            counterpart = RemoteBranchShortName.of(f"{other}/{branch}")
+            if counterpart not in remote_branches:
+                continue
+            relation = self._git.get_relation_to_remote_counterpart(branch, counterpart)
+            if relation != SyncToRemoteStatus.IN_SYNC_WITH_REMOTE:
+                result.append((other, relation))
+        return result
+
     def _is_merged_to_parent(
             self, branch: LocalBranchShortName, *, opt_squash_merge_detection: SquashMergeDetection) -> bool:
         parent = self.parent_of(branch)

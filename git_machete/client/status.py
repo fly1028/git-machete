@@ -375,15 +375,21 @@ class StatusMacheteClient(MacheteClient):
         hook_output_by_branch: Dict[LocalBranchShortName, str] = {}
         for branch in managed_branches:
             s, remote = self._git.get_combined_remote_sync_status(branch)
-            sync_status_by_branch[branch] = {
-                SyncToRemoteStatus.NO_REMOTES: "",
-                SyncToRemoteStatus.UNTRACKED: "<orange> (untracked)</orange>",
-                SyncToRemoteStatus.IN_SYNC_WITH_REMOTE: "",
-                SyncToRemoteStatus.BEHIND_REMOTE: f"<red> (behind <b>{remote}</b>)</red>",
-                SyncToRemoteStatus.AHEAD_OF_REMOTE: f"<red> (ahead of <b>{remote}</b>)</red>",
-                SyncToRemoteStatus.DIVERGED_FROM_AND_OLDER_THAN_REMOTE: f"<red> (diverged from & older than <b>{remote}</b>)</red>",
-                SyncToRemoteStatus.DIVERGED_FROM_AND_NEWER_THAN_REMOTE: f"<red> (diverged from <b>{remote}</b>)</red>",
-            }[SyncToRemoteStatus(s)]
+
+            def sync_marker(status: SyncToRemoteStatus, remote_name: Optional[str]) -> str:
+                rm = self._remote_markup(remote_name) if remote_name else ""
+                return {
+                    SyncToRemoteStatus.NO_REMOTES: "",
+                    SyncToRemoteStatus.UNTRACKED: "<orange> (untracked)</orange>",
+                    SyncToRemoteStatus.IN_SYNC_WITH_REMOTE: "",
+                    SyncToRemoteStatus.BEHIND_REMOTE: f"<red> (behind </red>{rm}<red>)</red>",
+                    SyncToRemoteStatus.AHEAD_OF_REMOTE: f"<red> (ahead of </red>{rm}<red>)</red>",
+                    SyncToRemoteStatus.DIVERGED_FROM_AND_OLDER_THAN_REMOTE: f"<red> (diverged from & older than </red>{rm}<red>)</red>",
+                    SyncToRemoteStatus.DIVERGED_FROM_AND_NEWER_THAN_REMOTE: f"<red> (diverged from </red>{rm}<red>)</red>",
+                }[SyncToRemoteStatus(status)]
+
+            sync_status_by_branch[branch] = sync_marker(s, remote) + "".join(
+                sync_marker(other_status, other) for other, other_status in self._other_remote_sync_statuses(branch, remote))
 
             hook_output = ""
             if hook_executable:

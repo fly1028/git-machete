@@ -605,8 +605,8 @@ class TraverseMacheteClient(MacheteClientWithCodeHosting):
         remote_branch = RemoteBranchShortName.of(f"{new_remote}/{branch}")
         if not self._git.get_commit_hash_by_revision(remote_branch):
             choices = pretty_choices('y', 'N', 'q', 'yq', other_remote_choice)
-            ask_message = f"Push untracked branch <b>{branch}</b> to <b>{new_remote}</b>?" + choices
-            ask_opt_yes_message = f"Pushing untracked branch <b>{branch}</b> to <b>{new_remote}</b>..."
+            ask_message = f"Push untracked branch <b>{branch}</b> to {self._remote_markup(new_remote)}?" + choices
+            ask_opt_yes_message = f"Pushing untracked branch <b>{branch}</b> to {self._remote_markup(new_remote)}..."
             ans = self.ask_if(
                 ask_message,
                 ask_opt_yes_message,
@@ -648,18 +648,19 @@ class TraverseMacheteClient(MacheteClientWithCodeHosting):
 
         ask_message, ask_opt_yes_message = {
             SyncToRemoteStatus.IN_SYNC_WITH_REMOTE: (
-                f"Set the remote of <b>{branch}</b> to <b>{new_remote}</b> without pushing or pulling?" +
+                f"Set the remote of <b>{branch}</b> to {self._remote_markup(new_remote)} without pushing or pulling?" +
                 pretty_choices('y', 'N', 'q', 'yq', other_remote_choice),
-                f"Setting the remote of <b>{branch}</b> to <b>{new_remote}</b>..."
+                f"Setting the remote of <b>{branch}</b> to {self._remote_markup(new_remote)}..."
             ),
             SyncToRemoteStatus.BEHIND_REMOTE: (
-                f"Pull <b>{branch}</b> (fast-forward only) from <b>{new_remote}</b>?" +
+                f"Pull <b>{branch}</b> (fast-forward only) from {self._remote_markup(new_remote)}?" +
                 pretty_choices('y', 'N', 'q', 'yq', other_remote_choice),
-                f"Pulling <b>{branch}</b> (fast-forward only) from <b>{new_remote}</b>..."
+                f"Pulling <b>{branch}</b> (fast-forward only) from {self._remote_markup(new_remote)}..."
             ),
             SyncToRemoteStatus.AHEAD_OF_REMOTE: (
-                f"Push branch <b>{branch}</b> to <b>{new_remote}</b>?" + pretty_choices('y', 'N', 'q', 'yq', other_remote_choice),
-                f"Pushing branch <b>{branch}</b> to <b>{new_remote}</b>..."
+                f"Push branch <b>{branch}</b> to {self._remote_markup(new_remote)}?" +
+                pretty_choices('y', 'N', 'q', 'yq', other_remote_choice),
+                f"Pushing branch <b>{branch}</b> to {self._remote_markup(new_remote)}..."
             ),
             SyncToRemoteStatus.DIVERGED_FROM_AND_OLDER_THAN_REMOTE: (
                 f"Reset branch <b>{branch}</b> to the commit pointed by <b>{remote_branch}</b>?" +
@@ -667,9 +668,9 @@ class TraverseMacheteClient(MacheteClientWithCodeHosting):
                 f"Resetting branch <b>{branch}</b> to the commit pointed by <b>{remote_branch}</b>..."
             ),
             SyncToRemoteStatus.DIVERGED_FROM_AND_NEWER_THAN_REMOTE: (
-                f"Push branch <b>{branch}</b> with force-with-lease to <b>{new_remote}</b>?" +
+                f"Push branch <b>{branch}</b> with force-with-lease to {self._remote_markup(new_remote)}?" +
                 pretty_choices('y', 'N', 'q', 'yq', other_remote_choice),
-                f"Pushing branch <b>{branch}</b> with force-with-lease to <b>{new_remote}</b>..."
+                f"Pushing branch <b>{branch}</b> with force-with-lease to {self._remote_markup(new_remote)}..."
             )
         }[SyncToRemoteStatus(relation)]
 
@@ -766,23 +767,11 @@ class TraverseMacheteClient(MacheteClientWithCodeHosting):
             branch: LocalBranchShortName,
             tracking_remote: Optional[str]
     ) -> List[Tuple[str, SyncToRemoteStatus]]:
-        if not self._config.traverse_push_all_remotes():
-            return []
-        remote_branches = self._git.get_remote_branches()
-        result: List[Tuple[str, SyncToRemoteStatus]] = []
-        for other in self._git.get_remotes():
-            if other == tracking_remote:
-                continue
-            counterpart = RemoteBranchShortName.of(f"{other}/{branch}")
-            # Only offer remotes the branch is already published on;
-            # creating it on further remotes stays an explicit `git push`.
-            if counterpart not in remote_branches:
-                continue
-            relation = self._git.get_relation_to_remote_counterpart(branch, counterpart)
-            if relation in (SyncToRemoteStatus.AHEAD_OF_REMOTE,
-                            SyncToRemoteStatus.DIVERGED_FROM_AND_NEWER_THAN_REMOTE):
-                result.append((other, relation))
-        return result
+        return [
+            (other, relation)
+            for other, relation in self._other_remote_sync_statuses(branch, tracking_remote)
+            if relation in (SyncToRemoteStatus.AHEAD_OF_REMOTE, SyncToRemoteStatus.DIVERGED_FROM_AND_NEWER_THAN_REMOTE)
+        ]
 
     def __handle_other_remotes(
             self,
@@ -795,12 +784,13 @@ class TraverseMacheteClient(MacheteClientWithCodeHosting):
             self._ensure_blank_separator()
             force = relation == SyncToRemoteStatus.DIVERGED_FROM_AND_NEWER_THAN_REMOTE
             if force:
-                question = (f"Branch <b>{current_branch}</b> diverged from (and has newer commits than) <b>{other}/{current_branch}</b>.\n"
-                            f"Push <b>{current_branch}</b> with force-with-lease to <b>{other}</b>?")
-                statement = f"Pushing <b>{current_branch}</b> with force-with-lease to <b>{other}</b>..."
+                question = (f"Branch <b>{current_branch}</b> diverged from (and has newer commits than) "
+                            f"{self._remote_markup(other)}<b>/{current_branch}</b>.\n"
+                            f"Push <b>{current_branch}</b> with force-with-lease to {self._remote_markup(other)}?")
+                statement = f"Pushing <b>{current_branch}</b> with force-with-lease to {self._remote_markup(other)}..."
             else:
-                question = f"Push <b>{current_branch}</b> to <b>{other}</b>?"
-                statement = f"Pushing <b>{current_branch}</b> to <b>{other}</b>..."
+                question = f"Push <b>{current_branch}</b> to {self._remote_markup(other)}?"
+                statement = f"Pushing <b>{current_branch}</b> to {self._remote_markup(other)}..."
             ans = self.ask_if(question + pretty_choices('y', 'N', 'q', 'yq'), statement, opt_yes=opt_yes)
             if ans in ('y', 'yes', 'yq'):
                 self._git.push(other, current_branch, force_with_lease=force, set_upstream=False)
@@ -819,8 +809,8 @@ class TraverseMacheteClient(MacheteClientWithCodeHosting):
     ) -> None:
         self._ensure_blank_separator()
         ans = self.ask_if(
-            f"Push <b>{current_branch}</b> to <b>{remote}</b>?" + pretty_choices('y', 'N', 'q', 'yq'),
-            f"Pushing <b>{current_branch}</b> to <b>{remote}</b>...",
+            f"Push <b>{current_branch}</b> to {self._remote_markup(remote)}?" + pretty_choices('y', 'N', 'q', 'yq'),
+            f"Pushing <b>{current_branch}</b> to {self._remote_markup(remote)}...",
             override_answer=None if opt_push_tracked else "N",
             opt_yes=opt_yes
         )
@@ -837,9 +827,9 @@ class TraverseMacheteClient(MacheteClientWithCodeHosting):
         assert remote_branch is not None
         ans = self.ask_if(
             f"Branch <b>{branch}</b> is behind its remote counterpart <b>{remote_branch}</b>.\n"
-            f"Pull <b>{branch}</b> (fast-forward only) from <b>{remote}</b>?" + pretty_choices('y', 'N', 'q', 'yq'),
+            f"Pull <b>{branch}</b> (fast-forward only) from {self._remote_markup(remote)}?" + pretty_choices('y', 'N', 'q', 'yq'),
             f"Branch <b>{branch}</b> is behind its remote counterpart <b>{remote_branch}</b>.\n"
-            f"Pulling <b>{branch}</b> (fast-forward only) from <b>{remote}</b>...",
+            f"Pulling <b>{branch}</b> (fast-forward only) from {self._remote_markup(remote)}...",
             opt_yes=opt_yes)
         if ans in ('y', 'yes', 'yq'):
             self._git.pull_ff_only(remote, remote_branch)
@@ -861,9 +851,9 @@ class TraverseMacheteClient(MacheteClientWithCodeHosting):
         assert remote_branch is not None
         ans = self.ask_if(
             f"Branch <b>{current_branch}</b> diverged from (and has newer commits than) its remote counterpart <b>{remote_branch}</b>.\n"
-            f"Push <b>{current_branch}</b> with force-with-lease to <b>{remote}</b>?" + pretty_choices('y', 'N', 'q', 'yq'),
+            f"Push <b>{current_branch}</b> with force-with-lease to {self._remote_markup(remote)}?" + pretty_choices('y', 'N', 'q', 'yq'),
             f"Branch <b>{current_branch}</b> diverged from (and has newer commits than) its remote counterpart <b>{remote_branch}</b>.\n"
-            f"Pushing <b>{current_branch}</b> with force-with-lease to <b>{remote}</b>...",
+            f"Pushing <b>{current_branch}</b> with force-with-lease to {self._remote_markup(remote)}...",
             override_answer=None if opt_push_tracked else "N", opt_yes=opt_yes)
         if ans in ('y', 'yes', 'yq'):
             self._git.push(remote, current_branch, force_with_lease=True)
