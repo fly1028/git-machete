@@ -89,6 +89,9 @@ class FullTerminalAnsiOutputCodes:
     YELLOW = '\033[33m'
     ORANGE = '\033[00;38;5;208m'
     RED = '\033[91m'
+    MAGENTA = '\033[95m'
+    CYAN = '\033[96m'
+    BLUE = '\033[94m'
     REVERSE_VIDEO = '\033[7m'
 
     # Cursor control
@@ -109,3 +112,6 @@ class BasicTerminalAnsiOutputCodes(FullTerminalAnsiOutputCodes):
     ENDC_UNDERLINE = FullTerminalAnsiOutputCodes.ENDC
     ORANGE = FullTerminalAnsiOutputCodes.YELLOW
     RED = '\033[31m'  # dark red
+    MAGENTA = '\033[35m'
+    CYAN = '\033[36m'
+    BLUE = '\033[34m'

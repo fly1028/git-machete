@@ -5,7 +5,7 @@ from typing import Optional
 
 from git_machete.code_hosting import CodeHostingGitConfigKeys
 from git_machete.git import Git
-from git_machete.utils.exceptions import ParsableEnum
+from git_machete.utils.exceptions import MacheteException, ParsableEnum
 
 
 def _override_fork_point_to_key(branch: str) -> str:
@@ -19,6 +19,13 @@ def _override_fork_point_while_descendant_of_key(branch: str) -> str:
 
 def _traverse_remote_fetch_key(remote: str) -> str:
     return f'machete.traverse.fetch.{remote}'
+
+
+def _remote_color_key(remote: str) -> str:
+    return f'machete.remote.{remote}.color'
+
+
+REMOTE_COLORS = ('red', 'orange', 'yellow', 'green', 'magenta', 'cyan', 'blue')
 
 
 class TraverseWhenBranchNotCheckedOutInAnyWorktree(ParsableEnum):
@@ -48,6 +55,7 @@ class MacheteConfig:
     _SQUASH_MERGE_DETECTION = 'machete.squashMergeDetection'
     _STATUS_EXTRA_SPACE_BEFORE_BRANCH_NAME = 'machete.status.extraSpaceBeforeBranchName'
     _TRAVERSE_PUSH = 'machete.traverse.push'
+    _TRAVERSE_PUSH_ALL_REMOTES = 'machete.traverse.pushAllRemotes'
     _TRAVERSE_WHEN_BRANCH_NOT_CHECKED_OUT_IN_ANY_WORKTREE = 'machete.traverse.whenBranchNotCheckedOutInAnyWorktree'
     _WORKTREE_USE_TOP_LEVEL_MACHETE_FILE = 'machete.worktree.useTopLevelMacheteFile'
 
@@ -68,6 +76,16 @@ class MacheteConfig:
     def core_editor(self) -> Optional[str]:
         return self._git.get_config_attr_or_none("core.editor")
 
+    def remote_color(self, remote: str) -> Optional[str]:
+        color = self._git.get_config_attr_or_none(_remote_color_key(remote))
+        if color is None:
+            return None
+        if color not in REMOTE_COLORS:
+            raise MacheteException(
+                f"Invalid value `{color}` for `{_remote_color_key(remote)}` git config key; "
+                f"expected one of: {', '.join(REMOTE_COLORS)}")
+        return color
+
     def squash_merge_detection(self) -> SquashMergeDetection:
         config_value_str = self._git.get_config_attr_or_none(self._SQUASH_MERGE_DETECTION)
         if config_value_str is None:
@@ -86,6 +104,10 @@ class MacheteConfig:
 
     def traverse_push(self) -> Optional[bool]:
         return self._git.get_boolean_config_attr_or_none(self._TRAVERSE_PUSH)
+
+    def traverse_push_all_remotes(self) -> bool:
+        return self._git.get_boolean_config_attr(
+            key=self._TRAVERSE_PUSH_ALL_REMOTES, default_value=False)
 
     def traverse_when_branch_not_checked_out_in_any_worktree(self) -> TraverseWhenBranchNotCheckedOutInAnyWorktree:
         config_value_str = self._git.get_config_attr_or_none(self._TRAVERSE_WHEN_BRANCH_NOT_CHECKED_OUT_IN_ANY_WORKTREE)

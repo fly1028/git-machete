@@ -49,6 +49,9 @@ def _fmt(s: str, *, use_ansi_escapes: bool) -> str:
         ('<orange>(.*?)</orange>',            f'{ao.ORANGE}\\1{ao.ENDC}',                 r'\1'),              # noqa: E241
         ('<yellow>(.*?)</yellow>',            f'{ao.YELLOW}\\1{ao.ENDC}',                 r'\1'),              # noqa: E241
         ('<green>(.*?)</green>',              f'{ao.GREEN}\\1{ao.ENDC}',                  r'\1'),              # noqa: E241
+        ('<magenta>(.*?)</magenta>',          f'{ao.MAGENTA}\\1{ao.ENDC}',                r'\1'),              # noqa: E241
+        ('<cyan>(.*?)</cyan>',                f'{ao.CYAN}\\1{ao.ENDC}',                   r'\1'),              # noqa: E241
+        ('<blue>(.*?)</blue>',                f'{ao.BLUE}\\1{ao.ENDC}',                   r'\1'),              # noqa: E241
         ('<reverse>(.*?)</reverse>',          f'{ao.REVERSE_VIDEO}\\1{ao.ENDC}',          r'\1'),              # noqa: E241
         ('<vbar/>',                            '│',                                        '|'),               # noqa: E241
         ('<rarrow/>',                          '➔',                                        '->'),              # noqa: E241

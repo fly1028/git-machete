@@ -636,7 +636,8 @@ class Git:
             raise UnderlyingGitException(
                 f"Cannot perform `git reset --keep {to_revision}`. This is most likely caused by local uncommitted changes.")
 
-    def push(self, remote: str, branch: LocalBranchShortName, *, force_with_lease: bool = False) -> None:  # noqa: KW
+    def push(self, remote: str, branch: LocalBranchShortName, *,  # noqa: KW
+             force_with_lease: bool = False, set_upstream: bool = True) -> None:
         if not force_with_lease:
             opt_force = []
         elif self.get_git_version() >= PUSH_FORCE_IF_INCLUDES:
@@ -647,7 +648,8 @@ class Git:
             opt_force = ["--force"]
         extra_push_opts = os.environ.get('GIT_MACHETE_PUSH_OPTS', '').split()
         args = [remote, branch]
-        self._run_git("push", "--set-upstream", *(extra_push_opts + opt_force + args), flush_caches=True)
+        opt_upstream = ["--set-upstream"] if set_upstream else []
+        self._run_git("push", *opt_upstream, *(extra_push_opts + opt_force + args), flush_caches=True)
 
     def pull_ff_only(self, remote: str, remote_branch: RemoteBranchShortName) -> None:  # noqa: KW
         self.fetch_remote(remote)

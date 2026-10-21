@@ -1039,3 +1039,84 @@ class TestStatus(BaseTest):
         raw_output = launch_command('status', '--color=always')
         expected_ansi = f"  {E.BOLD}{E.UNDERLINE}main{E.ENDC_UNDERLINE}{E.ENDC_BOLD_DIM}{E.ORANGE} (untracked){E.ENDC}\n"
         assert raw_output == expected_ansi
+
+    def test_status_other_remotes(self) -> None:
+        create_repo_with_remote()
+        add_remote("gitlab", create_repo("gitlab", bare=True, switch_dir_to_new_repo=False))
+        new_branch("master")
+        commit()
+        push()
+        push(remote="gitlab", set_upstream=False)
+        commit()
+        push()  # in sync with origin, ahead of gitlab
+        new_branch("in-sync")
+        commit()
+        push()
+        push(remote="gitlab", set_upstream=False)
+        new_branch("behind-gitlab")
+        commit()
+        commit()
+        push(remote="gitlab", set_upstream=False)
+        reset_to("HEAD~")
+        push()  # in sync with origin, behind gitlab
+        new_branch("only-on-origin")
+        commit()
+        push()
+        rewrite_branch_layout_file("master\n\tin-sync\n\t\tbehind-gitlab\n\t\t\tonly-on-origin")
+
+        # Other remotes are only consulted when `machete.traverse.pushAllRemotes` is set.
+        set_git_config_key("machete.traverse.pushAllRemotes", "false")
+        assert_success(
+            ['status'],
+            """
+            master
+            |
+            o-in-sync
+              |
+              o-behind-gitlab
+                |
+                o-only-on-origin *
+            """
+        )
+
+        set_git_config_key("machete.traverse.pushAllRemotes", "true")
+        assert_success(
+            ['status'],
+            """
+            master (ahead of gitlab)
+            |
+            o-in-sync
+              |
+              o-behind-gitlab (behind gitlab)
+                |
+                o-only-on-origin *
+            """
+        )
+
+    def test_status_remote_color(self, mocker: MockerFixture) -> None:
+        self.patch_symbol(mocker, "git_machete.utils.terminal.is_terminal_fully_fledged", lambda: True)
+        create_repo_with_remote()
+        add_remote("gitlab", create_repo("gitlab", bare=True, switch_dir_to_new_repo=False))
+        new_branch("master")
+        commit()
+        push()
+        push(remote="gitlab", set_upstream=False)
+        commit()
+        rewrite_branch_layout_file("master")
+        set_git_config_key("machete.traverse.pushAllRemotes", "true")
+        set_git_config_key("machete.remote.gitlab.color", "magenta")
+
+        E = FullTerminalAnsiOutputCodes
+        # The uncolored tracking remote keeps the red span going; the colored one closes it and reopens it afterwards.
+        assert launch_command('status', '--color=always') == (
+            f"  {E.BOLD}{E.UNDERLINE}master{E.ENDC_UNDERLINE}{E.ENDC_BOLD_DIM}"
+            f"{E.RED} (ahead of {E.BOLD}origin{E.ENDC_BOLD_DIM}){E.ENDC}"
+            f"{E.RED} (ahead of {E.ENDC}{E.BOLD}{E.MAGENTA}gitlab{E.ENDC}{E.ENDC_BOLD_DIM}{E.RED}){E.ENDC}\n"
+        )
+
+        set_git_config_key("machete.remote.gitlab.color", "purple")
+        assert_failure(
+            ['status'],
+            "Invalid value purple for machete.remote.gitlab.color git config key; "
+            "expected one of: red, orange, yellow, green, magenta, cyan, blue"
+        )

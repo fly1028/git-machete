@@ -14,10 +14,10 @@ from git_machete.utils.terminal import FullTerminalAnsiOutputCodes
 from tests.base_test import BaseTest
 from tests.cli_runner import assert_argument_error, assert_failure, assert_success, launch_command, rewrite_branch_layout_file
 from tests.git_repository import (add_file_and_commit, add_remote, amend_commit, check_out, commit, create_repo, create_repo_with_remote,
-                                  delete_branch, get_current_branch, get_git_version, merge, new_branch, push, remove_remote, reset_to,
-                                  set_git_config_key, set_remote_url, wait_to_bump_commit_timestamp)
+                                  delete_branch, get_commit_hash, get_current_branch, get_git_version, merge, new_branch, push,
+                                  remove_remote, reset_to, set_git_config_key, set_remote_url, wait_to_bump_commit_timestamp)
 from tests.mockers import fixed_author_and_committer_date_in_past, mock_input_returning, mock_input_returning_y, overridden_environment
-from tests.shell import execute, read_file, set_file_executable, write_to_file
+from tests.shell import execute, popen, read_file, set_file_executable, write_to_file
 
 
 class TestTraverse(BaseTest):
@@ -2317,3 +2317,222 @@ class TestTraverse(BaseTest):
             Reached branch {E.BOLD}feature{E.ENDC_BOLD_DIM} which has no successor; nothing left to update
             """)
         )
+
+    @staticmethod
+    def _setup_origin_and_gitlab_remotes() -> None:
+        create_repo_with_remote()
+        add_remote("gitlab", create_repo("gitlab", bare=True, switch_dir_to_new_repo=False))
+        set_git_config_key("machete.traverse.pushAllRemotes", "true")
+        new_branch("master")
+        commit()
+        push()
+        push(remote="gitlab", set_upstream=False)
+        commit()
+        push()  # in sync with origin, ahead of gitlab
+        new_branch("feature")
+        with fixed_author_and_committer_date_in_past():
+            commit("feature commit")
+        push()
+        push(remote="gitlab", set_upstream=False)
+        amend_commit("feature commit amended")  # diverged from (and newer than) both origin and gitlab
+        new_branch("only-on-origin")
+        commit()
+        push()
+        check_out("master")
+        rewrite_branch_layout_file("master\n\tfeature\n\t\tonly-on-origin")
+
+    def test_traverse_push_all_remotes(self, mocker: MockerFixture) -> None:
+        self._setup_origin_and_gitlab_remotes()
+
+        self.patch_symbol(mocker, 'builtins.input', mock_input_returning("y", "y", "y"))
+        assert_success(
+            ["traverse"],
+            """
+            Push master to gitlab? (y, N, q, yq)
+
+            Checking out feature... OK
+
+              master
+              |
+              o-feature * (diverged from origin) (diverged from gitlab)
+                |
+                o-only-on-origin
+
+            Branch feature diverged from (and has newer commits than) its remote counterpart origin/feature.
+            Push feature with force-with-lease to origin? (y, N, q, yq)
+
+            Branch feature diverged from (and has newer commits than) gitlab/feature.
+            Push feature with force-with-lease to gitlab? (y, N, q, yq)
+
+              master
+              |
+              o-feature *
+                |
+                o-only-on-origin
+
+            No successor of feature needs to be slid out or synced with upstream branch or remote; nothing left to update
+            """
+        )
+        assert get_commit_hash("gitlab/master") == get_commit_hash("master")
+        assert get_commit_hash("gitlab/feature") == get_commit_hash("feature")
+        # Pushing to another remote must not move the upstream away from the tracking remote.
+        assert popen("git rev-parse --abbrev-ref master@{upstream}") == "origin/master"
+        # A remote is never offered a branch it does not have yet.
+        assert popen("git branch -r --list gitlab/only-on-origin") == ""
+
+    def test_traverse_push_all_remotes_answers(self, mocker: MockerFixture) -> None:
+        self._setup_origin_and_gitlab_remotes()
+        gitlab_master = get_commit_hash("gitlab/master")
+        gitlab_feature = get_commit_hash("gitlab/feature")
+
+        self.patch_symbol(mocker, 'builtins.input', mock_input_returning("q"))
+        assert_success(["traverse"], "Push master to gitlab? (y, N, q, yq)\n")
+        assert get_commit_hash("gitlab/master") == gitlab_master
+
+        self.patch_symbol(mocker, 'builtins.input', mock_input_returning("n", "n", "n"))
+        assert_success(
+            ["traverse"],
+            """
+            Push master to gitlab? (y, N, q, yq)
+
+            Checking out feature... OK
+
+              master (ahead of gitlab)
+              |
+              o-feature * (diverged from origin) (diverged from gitlab)
+                |
+                o-only-on-origin
+
+            Branch feature diverged from (and has newer commits than) its remote counterpart origin/feature.
+            Push feature with force-with-lease to origin? (y, N, q, yq)
+
+            Branch feature diverged from (and has newer commits than) gitlab/feature.
+            Push feature with force-with-lease to gitlab? (y, N, q, yq)
+
+              master (ahead of gitlab)
+              |
+              o-feature * (diverged from origin) (diverged from gitlab)
+                |
+                o-only-on-origin
+
+            No successor of feature needs to be slid out or synced with upstream branch or remote; nothing left to update
+            """
+        )
+        assert get_commit_hash("gitlab/master") == gitlab_master
+        assert get_commit_hash("gitlab/feature") == gitlab_feature
+
+        check_out("master")
+        self.patch_symbol(mocker, 'builtins.input', mock_input_returning("yq"))
+        assert_success(["traverse"], "Push master to gitlab? (y, N, q, yq)\n")
+        assert get_commit_hash("gitlab/master") == get_commit_hash("master")
+        assert get_current_branch() == "master"
+
+        check_out("feature")
+        self.patch_symbol(mocker, 'builtins.input', mock_input_returning("n", "q"))
+        assert_success(
+            ["traverse"],
+            """
+            Branch feature diverged from (and has newer commits than) its remote counterpart origin/feature.
+            Push feature with force-with-lease to origin? (y, N, q, yq)
+
+            Branch feature diverged from (and has newer commits than) gitlab/feature.
+            Push feature with force-with-lease to gitlab? (y, N, q, yq)
+            """
+        )
+        assert get_commit_hash("gitlab/feature") == gitlab_feature
+
+    def test_traverse_push_all_remotes_with_yes(self) -> None:
+        self._setup_origin_and_gitlab_remotes()
+
+        assert_success(
+            ["traverse", "-y"],
+            """
+            Pushing master to gitlab...
+
+            Checking out feature... OK
+
+              master
+              |
+              o-feature * (diverged from origin) (diverged from gitlab)
+                |
+                o-only-on-origin
+
+            Branch feature diverged from (and has newer commits than) its remote counterpart origin/feature.
+            Pushing feature with force-with-lease to origin...
+
+            Pushing feature with force-with-lease to gitlab...
+
+              master
+              |
+              o-feature *
+                |
+                o-only-on-origin
+
+            No successor of feature needs to be slid out or synced with upstream branch or remote; nothing left to update
+            """
+        )
+        assert get_commit_hash("gitlab/master") == get_commit_hash("master")
+        assert get_commit_hash("gitlab/feature") == get_commit_hash("feature")
+
+    def test_traverse_push_all_remotes_respects_push_disabled(self) -> None:
+        self._setup_origin_and_gitlab_remotes()
+        gitlab_master = get_commit_hash("gitlab/master")
+        gitlab_feature = get_commit_hash("gitlab/feature")
+
+        rewrite_branch_layout_file("master push=no\n\tfeature push=no\n\t\tonly-on-origin")
+        assert_success(
+            ["traverse", "-y"],
+            """
+              master *  push=no (ahead of gitlab)
+              |
+              o-feature  push=no (diverged from origin) (diverged from gitlab)
+                |
+                o-only-on-origin
+
+            No successor of master needs to be slid out or synced with upstream branch or remote; nothing left to update
+            """
+        )
+        assert get_commit_hash("gitlab/master") == gitlab_master
+        assert get_commit_hash("gitlab/feature") == gitlab_feature
+
+        # `--no-push` must also hold for the re-check of other remotes after a rebase.
+        rewrite_branch_layout_file("master\n\tfeature\n\t\tonly-on-origin")
+        check_out("master")
+        commit()
+        assert_success(
+            ["traverse", "-y", "--no-push"],
+            """
+            Checking out feature... OK
+
+              master (ahead of origin) (ahead of gitlab)
+              |
+              x-feature * (diverged from origin) (diverged from gitlab)
+                |
+                o-only-on-origin
+
+            Rebasing feature onto master...
+
+
+            Checking out only-on-origin... OK
+
+              master (ahead of origin) (ahead of gitlab)
+              |
+              o-feature (diverged from origin) (diverged from gitlab)
+                |
+                x-only-on-origin *
+
+            Rebasing only-on-origin onto feature...
+
+
+              master (ahead of origin) (ahead of gitlab)
+              |
+              o-feature (diverged from origin) (diverged from gitlab)
+                |
+                o-only-on-origin * (diverged from origin)
+
+            Reached branch only-on-origin which has no successor; nothing left to update
+            """
+        )
+        assert get_commit_hash("feature~") == get_commit_hash("master")  # feature got rebased...
+        assert get_commit_hash("gitlab/master") == gitlab_master  # ...but nothing went to gitlab
+        assert get_commit_hash("gitlab/feature") == gitlab_feature

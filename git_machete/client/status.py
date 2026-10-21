@@ -327,17 +327,27 @@ class StatusMacheteClient(MacheteClient):
 
         sync_status_by_branch: Dict[LocalBranchShortName, str] = {}
         hook_output_by_branch: Dict[LocalBranchShortName, str] = {}
-        for branch in managed_branches:
-            s, remote = self._git.get_combined_remote_sync_status(branch)
-            sync_status_by_branch[branch] = {
+
+        def sync_marker(status: SyncToRemoteStatus, remote_name: Optional[str]) -> str:
+            rm = ""
+            if remote_name:
+                # A colored remote name ends with a full reset, so close the surrounding red span around it;
+                # an uncolored one only toggles bold, which keeps the red going.
+                rm = f"</red>{self._remote_markup(remote_name)}<red>" if self._config.remote_color(remote_name) else f"<b>{remote_name}</b>"
+            return {
                 SyncToRemoteStatus.NO_REMOTES: "",
                 SyncToRemoteStatus.UNTRACKED: "<orange> (untracked)</orange>",
                 SyncToRemoteStatus.IN_SYNC_WITH_REMOTE: "",
-                SyncToRemoteStatus.BEHIND_REMOTE: f"<red> (behind <b>{remote}</b>)</red>",
-                SyncToRemoteStatus.AHEAD_OF_REMOTE: f"<red> (ahead of <b>{remote}</b>)</red>",
-                SyncToRemoteStatus.DIVERGED_FROM_AND_OLDER_THAN_REMOTE: f"<red> (diverged from & older than <b>{remote}</b>)</red>",
-                SyncToRemoteStatus.DIVERGED_FROM_AND_NEWER_THAN_REMOTE: f"<red> (diverged from <b>{remote}</b>)</red>",
-            }[SyncToRemoteStatus(s)]
+                SyncToRemoteStatus.BEHIND_REMOTE: f"<red> (behind {rm})</red>",
+                SyncToRemoteStatus.AHEAD_OF_REMOTE: f"<red> (ahead of {rm})</red>",
+                SyncToRemoteStatus.DIVERGED_FROM_AND_OLDER_THAN_REMOTE: f"<red> (diverged from & older than {rm})</red>",
+                SyncToRemoteStatus.DIVERGED_FROM_AND_NEWER_THAN_REMOTE: f"<red> (diverged from {rm})</red>",
+            }[SyncToRemoteStatus(status)]
+
+        for branch in managed_branches:
+            s, remote = self._git.get_combined_remote_sync_status(branch)
+            sync_status_by_branch[branch] = sync_marker(s, remote) + "".join(
+                sync_marker(other_status, other) for other, other_status in self._other_remote_sync_statuses(branch, remote))
 
             hook_output = ""
             if hook_executable:
