@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import pytest
 from pytest_mock import MockerFixture
@@ -523,6 +524,31 @@ class TestGo(BaseTest):
         assert os.getcwd() == initial_dir, "go should not change directory"
         assert launch_command("show", "current").strip() == "develop", \
             "HEAD should remain on develop - the failed `go down` must not silently leave a partial state."
+
+    @pytest.mark.skipif(get_git_version() < WORKTREE_COMMAND, reason="git worktree command was introduced in git 2.5")
+    def test_go_write_branch_to(self, tmp_path: Path) -> None:
+        """With `--write-branch-to`, the destination branch is written to the file instead of being checked out,
+        even if it's checked out in another worktree."""
+        create_repo()
+        new_branch("develop")
+        commit()
+        new_branch("feature-1")
+        commit()
+
+        body: str = \
+            """
+            develop
+                feature-1
+            """
+        rewrite_branch_layout_file(body)
+        check_out("develop")
+        add_worktree("feature-1")
+        check_out("develop")
+
+        branch_file = tmp_path / "branch"
+        assert_success(["go", "down", f"--write-branch-to={branch_file}"], "")
+        assert branch_file.read_text() == "feature-1\n"
+        assert launch_command("show", "current").strip() == "develop"
 
     def test_go_directions_when_detached_head(self) -> None:
         """Verify behavior of 'git machete go' commands when in detached HEAD mode.

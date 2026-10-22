@@ -56,6 +56,7 @@ class CommandLineOptions:
         self.opt_unset_override: bool = False
         self.opt_update_related_descriptions: bool = False
         self.opt_with_urls: bool = False
+        self.opt_write_branch_to: Optional[str] = None
         self.opt_yes: bool = False
 
     def __repr__(self) -> str:  # pragma: no cover; debug only

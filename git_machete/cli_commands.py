@@ -349,6 +349,7 @@ COMMANDS: Tuple[CommandSpec, ...] = (
     CommandSpec(
         name="go",
         aliases=("g",),
+        options=(OptSpec(long="write-branch-to", takes_value=True),),
         positionals=(
             PositionalSpec(
                 name="direction",

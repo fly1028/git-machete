@@ -67,6 +67,7 @@ _git_machete() {
   local diff_opts="-s --stat"
   local discover_opts="-C --checked-out-since= -l --list-commits -r --roots= -y --yes"
   local fork_point_opts="--explain --inferred --override-to= --override-to-inferred --override-to-parent --unset-override"
+  local go_opts="--write-branch-to="
   local githublab_anno_opts="--with-urls"
   local githublab_create_opts="--draft --title= -U --update-related-descriptions -y --yes"
   local githublab_checkout_opts="--all --by= --mine"
@@ -118,6 +119,7 @@ _git_machete() {
             "--explain --override-to= --override-to-inferred --override-to-parent --unset-override")
           __gitcomp "$common_opts $filtered_fork_point_opts"
           ;;
+        g|go) __gitcomp "$common_opts $go_opts" ;;
         github)
           case ${COMP_WORDS[3]} in
             "anno-prs") __gitcomp "$common_opts $githublab_anno_opts" ;;

@@ -9,6 +9,7 @@ except ImportError:  # pragma: no cover; Windows-specific
     termios = None  # type: ignore[assignment]
     tty = None  # type: ignore[assignment]
 
+from git_machete.client.go_show import write_branch_to
 from git_machete.client.status import StatusData, StatusFlags, StatusMacheteClient
 from git_machete.git import LocalBranchShortName
 from git_machete.utils import terminal
@@ -114,16 +115,20 @@ class GoInteractiveMacheteClient(StatusMacheteClient):
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
-    def go_interactive(self) -> None:
+    def go_interactive(self, *, opt_write_branch_to: Optional[str]) -> None:
         """
-        Launch interactive branch selection interface, then check out the chosen branch.
+        Launch interactive branch selection interface, then check out the chosen branch
+        (or write it to `opt_write_branch_to`, if provided).
         Status data is computed once at start; only rendering (format_status_output) runs on each redraw.
         """
         self._git.expect_no_operation_in_progress()
         self.expect_at_least_one_managed_branch()
         current_branch = self._git.get_current_branch_or_none()
         selected_branch = self._pick_branch_interactively(current_branch=current_branch)
-        if selected_branch is not None and selected_branch != current_branch:
+        if selected_branch is not None and opt_write_branch_to is not None:
+            print()
+            write_branch_to(opt_write_branch_to, selected_branch)
+        elif selected_branch is not None and selected_branch != current_branch:
             print()
             print_fmt(f"Checking out <b>{selected_branch}</b>... ", newline=False)
             self._git.checkout_in_current_worktree(selected_branch)

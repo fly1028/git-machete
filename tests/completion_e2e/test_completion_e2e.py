@@ -138,6 +138,8 @@ test_cases: Dict[str, str] = {
         "down first last next prev root up",
     "git machete go ":
         "down first last next prev root up",
+    "git machete go -":
+        "--debug -h --help -v --verbose --write-branch-to",
     "git machete help ":
         "add advance anno completion config delete-unmanaged diff discover edit file fork-point format github gitlab "
         "go help hooks is-managed list log reapply rename show slide-out squash status traverse update version",

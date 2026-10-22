@@ -1252,7 +1252,7 @@ long_docs: Dict[str, str] = {
    """,
     "go": """
         <b>Usage</b><b>
-           git machete g[o] [<direction>]</b>
+           git machete g[o] [<direction>] [--write-branch-to=<file>]</b>
 
         where <direction> is one of: `d[own]`, `f[irst]`, `l[ast]`, `n[ext]`, `p[rev]`, `r[oot]`, `u[p]`
 
@@ -1291,6 +1291,14 @@ long_docs: Dict[str, str] = {
            * `up`:      the direct parent/upstream branch of the current branch.
 
         This is roughly equivalent to `git checkout $(git machete show <direction>)`.
+
+        <b>Options</b>
+
+           <b>--write-branch-to=<file></b>
+              Instead of checking out the selected branch, write its name to `<file>`.
+              Useful for shell functions that decide where to work on the branch,
+              for example by changing directory into the worktree where it's checked out.
+              Nothing is written if interactive mode is quit without selecting a branch.
    """,
     "help": """
         <b>Usage</b><b>

@@ -78,6 +78,7 @@ _git-machete() {
         (g|go)
           _arguments \
             '1:: :__git_machete_directions_go' \
+            '--write-branch-to=[Write the selected branch name to the given file instead of checking it out]: :_files' \
             "${common_flags[@]}"
           ;;
         (github)

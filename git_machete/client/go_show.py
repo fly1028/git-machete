@@ -7,6 +7,13 @@ from git_machete.utils.exceptions import MacheteException, UnexpectedMacheteExce
 from git_machete.utils.markup import green_ok, print_fmt
 
 
+def write_branch_to(path: str, branch: LocalBranchShortName) -> None:
+    """Used by `go --write-branch-to=<path>` in place of a checkout, so that a shell wrapper can decide
+    where to work on the branch (e.g. `cd` into a worktree) - something the git-machete process can't do for its parent shell."""
+    with open(path, "w", encoding='utf-8', newline='\n') as f:
+        f.write(branch + "\n")
+
+
 class GoShowMacheteClient(MacheteClient):
     def first_branch_for(self, branch: LocalBranchShortName) -> LocalBranchShortName:
         root = self.root_branch_for(branch, if_unmanaged=PickRoot.FIRST)
@@ -62,11 +69,14 @@ class GoShowMacheteClient(MacheteClient):
         else:
             return children
 
-    def go(self, direction: str) -> None:
+    def go(self, direction: str, *, opt_write_branch_to: Optional[str]) -> None:
         self._git.expect_no_operation_in_progress()
         current_branch = self._git.get_current_branch_or_none()
         # with pick_if_multiple=True, the returned list will have exactly one element
         dest = self._parse_direction(direction, branch=current_branch, allow_current=False, pick_if_multiple=True)[0]
+        if opt_write_branch_to is not None:
+            write_branch_to(opt_write_branch_to, dest)
+            return
         if dest != current_branch:
             print_fmt(f"Checking out <b>{dest}</b>... ", newline=False)
             self._git.checkout_in_current_worktree(dest)

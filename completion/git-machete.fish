@@ -167,6 +167,7 @@ complete -c git-machete -n "__fish_seen_subcommand_from go g; and not __fish_see
 complete -c git-machete -n "__fish_seen_subcommand_from go g; and not __fish_seen_subcommand_from down d first f last l next n prev p root r up u" -f -a prev  -d 'the direct predecessor of the current branch in the branch layout file'
 complete -c git-machete -n "__fish_seen_subcommand_from go g; and not __fish_seen_subcommand_from down d first f last l next n prev p root r up u" -f -a root  -d 'the root of the tree where the current branch is located'
 complete -c git-machete -n "__fish_seen_subcommand_from go g; and not __fish_seen_subcommand_from down d first f last l next n prev p root r up u" -f -a up    -d 'the direct parent/upstream branch of the current branch'
+complete -c git-machete -n "__fish_seen_subcommand_from go g" -r -F -l write-branch-to -d 'Write the selected branch name to the given file instead of checking it out'
 
 # git machete help
 complete -c git-machete -n "not __fish_seen_subcommand_from $__machete_commands" -f -a help                           -d 'Display overview, or detailed help for a specified command'

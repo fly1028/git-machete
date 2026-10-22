@@ -2,6 +2,7 @@
 import os
 import sys
 import textwrap
+from pathlib import Path
 from typing import Any, Tuple, Type
 
 import pytest
@@ -75,7 +76,7 @@ class TestGoInteractive(BaseTest):
             """
         rewrite_branch_layout_file(body)
 
-    def run_interactive_test(self, mocker: MockerFixture, keys: Tuple[str, ...]) -> str:
+    def run_interactive_test(self, mocker: MockerFixture, keys: Tuple[str, ...], *args: str) -> str:
         """
         Helper to run an interactive test by mocking stdin and terminal methods.
         Returns the captured stdout.
@@ -98,7 +99,7 @@ class TestGoInteractive(BaseTest):
         self.patch_symbol(mocker, 'tty.setraw', lambda _fd: None)  # noqa: U100
 
         # Run the command and return the output
-        return launch_command('go')
+        return launch_command('go', *args)
 
     def test_go_interactive_navigation_up_down(self, mocker: MockerFixture) -> None:
         """Test that up/down arrow keys navigate through branches."""
@@ -432,6 +433,19 @@ class TestGoInteractive(BaseTest):
 
         current_branch = os.popen("git rev-parse --abbrev-ref HEAD").read().strip()
         assert current_branch == "master"
+
+    def test_go_interactive_write_branch_to(self, mocker: MockerFixture, tmp_path: Path) -> None:
+        """With `--write-branch-to`, the selected branch is written to the file instead of being checked out."""
+        check_out("master")
+        branch_file = tmp_path / "branch"
+
+        self.run_interactive_test(mocker, (AI.KEY_DOWN, AI.KEY_DOWN, KEY_ENTER), f"--write-branch-to={branch_file}")
+        assert branch_file.read_text() == "feature-1\n"
+        assert launch_command("show", "current").strip() == "master"
+
+        branch_file.unlink()
+        self.run_interactive_test(mocker, (AI.KEY_DOWN, 'q'), f"--write-branch-to={branch_file}")
+        assert not branch_file.exists()
 
     def test_go_interactive_when_detached_head(self, mocker: MockerFixture) -> None:
         """Test that interactive mode works when in detached HEAD mode."""

@@ -6,7 +6,7 @@ go
 
 .. code-block:: shell
 
-    git machete g[o] [<direction>]
+    git machete g[o] [<direction>] [--write-branch-to=<file>]
 
 where <direction> is one of: ``d[own]``, ``f[irst]``, ``l[ast]``, ``n[ext]``, ``p[rev]``, ``r[oot]``, ``u[p]``
 
@@ -45,3 +45,10 @@ If ``<direction>`` is provided, checks out the branch specified by the given dir
 * ``up``:      the direct parent/upstream branch of the current branch.
 
 This is roughly equivalent to ``git checkout $(git machete show <direction>)``.
+
+**Options**
+
+--write-branch-to=<file>   Instead of checking out the selected branch, write its name to ``<file>``.
+                           Useful for shell functions that decide where to work on the branch,
+                           for example by changing directory into the worktree where it's checked out.
+                           Nothing is written if interactive mode is quit without selecting a branch.

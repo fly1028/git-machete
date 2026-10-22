@@ -164,6 +164,8 @@ def _populate_cli_options(
             cli_opts.opt_return_to = "nearest-remaining"
         elif key == "with-urls":
             cli_opts.opt_with_urls = True
+        elif key == "write-branch-to":
+            cli_opts.opt_write_branch_to = value
         elif key == "yes":
             cli_opts.opt_yes = True
         # `debug`, `verbose`, `color`, `help`, `version`, `checkout-my-github-prs`,
@@ -392,9 +394,9 @@ def launch_internal(orig_args: List[str]) -> None:
         elif cmd in {"go", alias_by_command["go"]}:
             direction: Optional[str] = parsed.positionals.get("direction")
             if direction is not None:
-                GoShowMacheteClient().go(direction)
+                GoShowMacheteClient().go(direction, opt_write_branch_to=cli_opts.opt_write_branch_to)
             else:
-                GoInteractiveMacheteClient().go_interactive()
+                GoInteractiveMacheteClient().go_interactive(opt_write_branch_to=cli_opts.opt_write_branch_to)
         elif cmd == "help":
             print_fmt(get_help_description(display_help_topics=True, command=parsed.positionals.get("topic_or_cmd")))
         elif cmd == "is-managed":
