@@ -2,6 +2,8 @@
 
 ## New in git-machete 3.46.2
 
+- fixed: `git machete discover` no longer prunes as stale a branch created by `git worktree add -b` and used only in that worktree
+
 ## New in git-machete 3.46.1
 
 - fixed: boolean git config keys now accept the same true/false literals as `git config --bool`, and reject invalid values instead of silently treating them as false

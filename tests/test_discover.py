@@ -1,6 +1,7 @@
 import os.path
 import re
 import textwrap
+from tempfile import mkdtemp
 from typing import Set
 
 import pytest
@@ -12,8 +13,8 @@ from tests.base_test import BaseTest
 from tests.cli_runner import assert_failure, assert_success, launch_command, rewrite_branch_layout_file
 from tests.git_repository import (add_worktree, check_out, commit, create_repo, create_repo_with_remote, get_git_version, merge, new_branch,
                                   push)
-from tests.mockers import mock_input_returning, overridden_environment
-from tests.shell import read_file
+from tests.mockers import fixed_author_and_committer_date_in_past, mock_input_returning, overridden_environment
+from tests.shell import execute, read_file
 
 
 class TestDiscover(BaseTest):
@@ -139,7 +140,8 @@ class TestDiscover(BaseTest):
 
         create_repo()
         new_branch("root")
-        commit()
+        with fixed_author_and_committer_date_in_past():
+            commit()
 
         assert_success(
             ["discover", "--checked-out-since=tomorrow"],
@@ -269,3 +271,20 @@ class TestDiscover(BaseTest):
         assert from_main == from_worktree, (from_main, from_worktree)
         assert "feat_wt" in from_main    # checked out only in the linked worktree
         assert "feat_main" in from_main  # checked out only in the main worktree
+
+    @pytest.mark.skipif(get_git_version() < WORKTREE_COMMAND, reason="git worktree command was introduced in git 2.5")
+    def test_discover_includes_branch_created_by_worktree_add(self) -> None:
+        """A branch created by `git worktree add -b` counts as checked out, though no reflog logs a checkout of it."""
+        create_repo()
+        new_branch("master")
+        commit()
+        main_repo = os.getcwd()
+        worktree = mkdtemp()
+        execute(f"git worktree add -f -b feat_wt {worktree} master")
+        os.chdir(worktree)
+        execute("git commit --allow-empty -m feat_wt")
+        os.chdir(main_repo)
+
+        launch_command("discover", "-y", "--checked-out-since=1 day ago")
+
+        assert read_file(".git/machete") == "master\n  feat_wt\n"
